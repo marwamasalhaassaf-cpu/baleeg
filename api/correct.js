@@ -1,5 +1,5 @@
 // api/correct.js
-// نسخة تجريبية مجانية تستخدم Google Gemini بدل Claude
+// نسخة تشخيصية مؤقتة - تكشف معلومات عن المفتاح المخزن لتشخيص المشكلة
 // مفتاح الـ API يبقى محفوظاً في إعدادات Vercel (GEMINI_API_KEY) ولا يظهر في كود الموقع
 
 export default async function handler(req, res) {
@@ -22,7 +22,6 @@ export default async function handler(req, res) {
     const system = body.system || '';
     const messages = body.messages || [];
 
-    // نحول رسائل الموقع (بصيغة Anthropic) إلى صيغة Gemini
     const parts = [];
     for (const msg of messages) {
       const content = msg.content;
@@ -50,7 +49,7 @@ export default async function handler(req, res) {
     };
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,12 +60,21 @@ export default async function handler(req, res) {
     const data = await geminiRes.json();
 
     if (!geminiRes.ok) {
-      res.status(geminiRes.status).json({ error: data.error?.message || 'خطأ من Gemini API' });
+      // معلومات تشخيصية آمنة: طول المفتاح وأول وآخر 4 أحرف فقط (بدون كشف المفتاح كامل)
+      const debugInfo = {
+        keyLength: apiKey.length,
+        keyStart: apiKey.substring(0, 4),
+        keyEnd: apiKey.substring(apiKey.length - 4),
+        keyHasSpaces: apiKey.includes(' '),
+        keyHasNewline: /[\r\n]/.test(apiKey)
+      };
+      res.status(geminiRes.status).json({
+        error: data.error?.message || 'خطأ من Gemini API',
+        debug: debugInfo
+      });
       return;
     }
 
-    // نستخرج النص من رد Gemini ونعيده بنفس شكل رد Claude
-    // حتى لا نحتاج لتعديل أي شيء في index.html
     const text = (data.candidates?.[0]?.content?.parts || [])
       .map(p => p.text || '')
       .join('');
