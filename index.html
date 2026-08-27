@@ -1026,7 +1026,26 @@ function syncC(m){ const e=document.getElementById('ess-'+m); const c=document.g
 
 function hImg(e){ const f=e.target.files[0]; if(f) readF(f); }
 function hDrop(e){ e.preventDefault(); document.getElementById('upa').classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f) readF(f); }
-function readF(f){ const r=new FileReader(); r.onload=ev=>{ imgB64=ev.target.result; document.getElementById('img-img').src=imgB64; document.getElementById('img-prev').style.display='block'; document.getElementById('upa').style.display='none'; document.getElementById('img-st').textContent='✓ الصورة جاهزة'; }; r.readAsDataURL(f); }
+function readF(f){
+  const r=new FileReader();
+  r.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=1600;
+      let w=img.width, h=img.height;
+      if(w>MAX||h>MAX){ const ratio=Math.min(MAX/w,MAX/h); w=Math.round(w*ratio); h=Math.round(h*ratio); }
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const ctx=cv.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.drawImage(img,0,0,w,h);
+      imgB64=cv.toDataURL('image/jpeg',0.82);
+      document.getElementById('img-img').src=imgB64;
+      document.getElementById('img-prev').style.display='block';
+      document.getElementById('upa').style.display='none';
+      document.getElementById('img-st').textContent='✓ الصورة جاهزة';
+    };
+    img.src=ev.target.result;
+  };
+  r.readAsDataURL(f);
+}
 function clearImg(){ imgB64=null; document.getElementById('img-prev').style.display='none'; document.getElementById('upa').style.display='block'; document.getElementById('imgInp').value=''; }
 
 window.addEventListener('load',()=>{
@@ -1108,7 +1127,10 @@ async function startC(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({system:sys,messages:[{role:'user',content}]})
     });
-    const data=await resp.json();
+    const rawResp=await resp.text();
+    let data;
+    try{ data=JSON.parse(rawResp); }
+    catch(e){ throw new Error('رد غير متوقع من الخادم (قد تكون الصورة كبيرة جداً). جربي صورة أصغر أو أوضح.'); }
     if(data.error) throw new Error(data.error);
     const rawText=(data.content||[]).map(c=>c.text||'').join('');
     const result=JSON.parse(rawText.replace(/```json|```/g,'').trim());
