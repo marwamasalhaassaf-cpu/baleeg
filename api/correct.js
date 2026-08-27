@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
     const geminiBody = {
       contents: [{ role: 'user', parts }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
+      generationConfig: { temperature: 0.3, maxOutputTokens: 4096, responseMimeType: 'application/json' },
       ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {})
     };
 
