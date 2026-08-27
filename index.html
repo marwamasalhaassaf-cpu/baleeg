@@ -1052,7 +1052,7 @@ async function extractCvs(){
   const cv=document.getElementById('drawCanvas'); imgB64=cv.toDataURL('image/png');
   document.getElementById('draw-ext').style.display='block'; document.getElementById('ess-draw').value='⏳ جارٍ استخراج...';
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/png',data:imgB64.split(',')[1]}},{type:'text',text:'استخرج النص المكتوب بخط اليد. أعد النص فقط.'}]}]})});
+    const resp=await fetch('/api/correct',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/png',data:imgB64.split(',')[1]}},{type:'text',text:'استخرج النص المكتوب بخط اليد. أعد النص فقط.'}]}]})});
     const d=await resp.json(); document.getElementById('ess-draw').value=d.content.map(c=>c.text||'').join('').trim(); syncC('draw');
   } catch(e){ document.getElementById('ess-draw').value='تعذّر الاستخراج. اكتب يدوياً.'; }
 }
@@ -1090,28 +1090,27 @@ async function startC(){
   const msgs=['جارٍ قراءة النص...','جارٍ تحليل الأخطاء اللغوية...','جارٍ تقييم المعايير...','جارٍ كتابة تقرير بليغ...'];
   let mi=0; const li=setInterval(()=>document.getElementById('lmsg').textContent=msgs[mi++%msgs.length],1800);
   try{
-    const GEMINI_KEY='AIzaSyBcKGv4Z3Cwle05kWW6bFOXyhb0-Mdotfs';
     const tName=CU.name||'مروة عسّاف';
     const sys=buildSys(selType,tName);
-    let parts;
+    let content;
     if(useImg){
       const b64=imgB64.split(',')[1];
       const mt=imgB64.split(';')[0].split(':')[1];
-      parts=[
-        {inline_data:{mime_type:mt,data:b64}},
-        {text:`${sys}\n\nاسم الطالب: ${name}\nالصف: ${grade}\nنوع النص: ${TYPE_NAMES[selType]}\nصحّح النص في الصورة. أجب بـ JSON فقط.`}
+      content=[
+        {type:'image',source:{type:'base64',media_type:mt,data:b64}},
+        {type:'text',text:`اسم الطالب: ${name}\nالصف: ${grade}\nنوع النص: ${TYPE_NAMES[selType]}\nصحّح النص في الصورة. أجب بـ JSON فقط.`}
       ];
     } else {
-      parts=[{text:`${sys}\n\nاسم الطالب: ${name}\nالصف: ${grade}\nنوع النص: ${TYPE_NAMES[selType]}\n\nالنص:\n${finalText}\n\nأجب بـ JSON فقط.`}];
+      content=[{type:'text',text:`اسم الطالب: ${name}\nالصف: ${grade}\nنوع النص: ${TYPE_NAMES[selType]}\n\nالنص:\n${finalText}\n\nأجب بـ JSON فقط.`}];
     }
-    const resp=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,{
+    const resp=await fetch('/api/correct',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts}],generationConfig:{temperature:0.3,maxOutputTokens:2000}})
+      body:JSON.stringify({system:sys,messages:[{role:'user',content}]})
     });
     const data=await resp.json();
-    if(data.error) throw new Error(data.error.message);
-    const rawText=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    if(data.error) throw new Error(data.error);
+    const rawText=(data.content||[]).map(c=>c.text||'').join('');
     const result=JSON.parse(rawText.replace(/```json|```/g,'').trim());
     const ds=selGrade===25?Math.round(result.totalScore*25/100*10)/10:result.totalScore;
     const rec={id:Date.now(),name,grade,class:CU.class||grade,stuId:null,teacherId:CU.id,teacherName:CU.name,type:selType,typeName:TYPE_NAMES[selType],score:ds,scoreMax:selGrade,totalScore100:result.totalScore,level:result.level,date:new Date().toLocaleDateString('ar'),status:'revealed',rawText:finalText||'[صورة]',result};
@@ -1254,9 +1253,10 @@ async function correctPend(id){
     const teachers=S.teachers(); const myT=teachers.find(t=>t.id===rec.teacherId);
     const sys=buildSys(rec.type,myT?.name);
     const uc=`اسم الطالب: ${rec.name}\nالصف: ${rec.grade}\nنوع النص: ${rec.typeName}\n\nالنص:\n${rec.rawText}`;
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:sys,messages:[{role:'user',content:uc}]})});
+    const resp=await fetch('/api/correct',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:sys,messages:[{role:'user',content:uc}]})});
     const data=await resp.json();
-    const result=JSON.parse(data.content.map(c=>c.text||'').join('').replace(/```json|```/g,'').trim());
+    if(data.error) throw new Error(data.error);
+    const result=JSON.parse((data.content||[]).map(c=>c.text||'').join('').replace(/```json|```/g,'').trim());
     const ds=rec.scoreMax===25?Math.round(result.totalScore*25/100*10)/10:result.totalScore;
     const rs2=S.records(); const ui=rs2.findIndex(r=>r.id===id);
     if(ui>=0){ rs2[ui].result=result; rs2[ui].score=ds; rs2[ui].totalScore100=result.totalScore; rs2[ui].level=result.level; rs2[ui].status='corrected'; S.saveR(rs2); }
