@@ -1,6 +1,5 @@
 // api/correct.js
-// نسخة تشخيصية مؤقتة - تكشف معلومات عن المفتاح المخزن لتشخيص المشكلة
-// مفتاح الـ API يبقى محفوظاً في إعدادات Vercel (GEMINI_API_KEY) ولا يظهر في كود الموقع
+// يستقبل الطلب من الواجهة ويرسله لواجهة Gemini بأمان (المفتاح لا يظهر أبداً في كود الموقع)
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -45,6 +44,7 @@ export default async function handler(req, res) {
 
     const geminiBody = {
       contents: [{ role: 'user', parts }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 2000 },
       ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {})
     };
 
@@ -60,17 +60,8 @@ export default async function handler(req, res) {
     const data = await geminiRes.json();
 
     if (!geminiRes.ok) {
-      // معلومات تشخيصية آمنة: طول المفتاح وأول وآخر 4 أحرف فقط (بدون كشف المفتاح كامل)
-      const debugInfo = {
-        keyLength: apiKey.length,
-        keyStart: apiKey.substring(0, 4),
-        keyEnd: apiKey.substring(apiKey.length - 4),
-        keyHasSpaces: apiKey.includes(' '),
-        keyHasNewline: /[\r\n]/.test(apiKey)
-      };
       res.status(geminiRes.status).json({
-        error: data.error?.message || 'خطأ من Gemini API',
-        debug: debugInfo
+        error: data.error?.message || 'خطأ من Gemini API'
       });
       return;
     }
@@ -81,6 +72,6 @@ export default async function handler(req, res) {
 
     res.status(200).json({ content: [{ type: 'text', text }] });
   } catch (err) {
-    res.status(500).json({ error: 'فشل الاتصال بـ Gemini API', details: err.message });
+    res.status(500).json({ error: 'فشل الاتصال بواجهة الذكاء الاصطناعي', details: err.message });
   }
 }
